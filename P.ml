@@ -294,7 +294,7 @@ module CPS =
 
     let _ = 
       Printf.printf "Running CPS-style:\n%!";
-
+(*
       run test01 "abc";
       run test01 "abcd";
       run test02 "a";
@@ -323,7 +323,7 @@ module CPS =
 
       (* run test08 "(n+(n+(n+(n+(n+(n+n))))))"; *)
       
-      run test09 "1-2+0";
+      run test09 "1-2+0"; *)
   end
 
 module MonadicCPS =
@@ -363,7 +363,7 @@ module MonadicCPS =
       let i = ref 0 in
       (fun s -> 
          if !log then (
-            Printf.printf "%s %d\n%!" s !i;
+           Printf.printf "%s %d\n%!" s !i;
            incr i;
            ignore (read_line ())
         )
@@ -401,18 +401,11 @@ module MonadicCPS =
       )
 
     let alt a b s = 
-      let t = ticker () in
       let rec inner a b () =
         match a () with
-        | Ok (ta, sa, ka) -> 
-            t ("alt:" (*^ show(tree) ta*));
-            Ok (ta, sa, inner b ka)
-        | Continue ka -> 
-            t "alt:continue"; 
-            Continue (inner b ka)
-        | End -> 
-            t "alt:end"; 
-            b ()
+        | Ok (ta, sa, ka) -> Ok (ta, sa, inner b ka)
+        | Continue ka     -> Continue (inner b ka)
+        | End             -> b ()
       in
       Continue (inner (fun () -> a s) (fun () -> b s))
 
@@ -426,6 +419,7 @@ module MonadicCPS =
         | End             -> None
       in
       inner (fun () -> p s)
+
 
     let (|>) = seq
     let (<>) = alt
@@ -545,6 +539,36 @@ module MonadicCPS =
     
     let test09 = expr integer
 *)
+
+    let test10 = 
+      let rec w s = 
+        (
+           (w
+           |> (fun x     s -> maps (fun y -> x,y           ) (fun () -> w s) ())
+           |> (fun (x,y) s -> maps (fun z -> `Three (x,y,z)) (fun () -> w s) ())
+           )
+        <> (w
+           |> (fun x     s -> maps (fun y -> `Two (x,y)    ) (fun () -> w s) ())
+           )
+        <> (fun s -> maps (fun _ -> `One) (fun () -> a s) ())
+        ) s 
+      in w |> get_eof
+
+    let test11 = 
+      let rec w s = 
+        (
+           (fun s -> maps (fun _ -> `One) (fun () -> a s) ())
+        <> (w
+           |> (fun x     s -> maps (fun y -> `Two (x,y)    ) (fun () -> w s) ())
+           )
+        <>
+           (w
+           |> (fun x     s -> maps (fun y -> x,y           ) (fun () -> w s) ())
+           |> (fun (x,y) s -> maps (fun z -> `Three (x,y,z)) (fun () -> w s) ())
+           )
+        ) s 
+      in w |> get_eof
+
     let run printer test input =
       Printf.printf "%s\n%!" @@
       show(option) printer (apply test @@ of_string input)
@@ -595,9 +619,20 @@ module MonadicCPS =
     
     let runtest08 = run (print_expr' (fun _ -> "n")) test08
 
+    let runtest1_ = 
+      let rec print = function 
+      | `One           -> "a"
+      | `Two (x,y)     -> Printf.sprintf "[%s %s]" (print x) (print y)
+      | `Three (x,y,z) -> Printf.sprintf "[%s %s %s]" (print x) (print y) (print z)
+      in run print
+
+    let runtest10 = runtest1_ test10
+
+    let runtest11 = runtest1_ test11
+
     let _ = 
-      Printf.printf "Running CPS-style:\n%!";
-      
+      Printf.printf "Running monadic CPS-style:\n%!";
+(*
       runtest00 "ab";
       runtest00 "c";
       runtest00 "d";
@@ -634,5 +669,20 @@ module MonadicCPS =
 (*      
       runtest09 "1-2+0";
 *)
+
+      runtest10 "a";
+      runtest10 "aa";
+      runtest10 "aaa";
+      runtest10 "aaaaa";
+      runtest10 "aaaaaaaaaa";
+      (* runtest10 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" *)
+*)
+      runtest11 "a";
+      runtest11 "aa";
+      runtest11 "aaa";
+      runtest11 "aaaaa";
+      runtest11 "aaaaaaaaaa";
+      runtest11 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
   end
 
