@@ -530,15 +530,42 @@ module MonadicCPS =
     let test07 = expr (fun s -> maps (fun x -> `Primary x) (fun () -> (a <> b <> c) s) ())
     
     let test08 = expr (fun s -> maps (fun x -> `Primary x) (fun () -> sym 'n' s) ())
-(*
+
     let integer = 
-      let nzdigit   = List.fold_left (fun acc x -> acc <> sym x) (sym '1') (of_string "23456789") in
-      let digit     = sym '0' <> nzdigit in 
-      let rec num s = ((digit |> num) <> empty) s in
-      (nzdigit |> num) <> (sym '0')
-    
-    let test09 = expr integer
-*)
+      let to_int c = int_of_char c - int_of_char '0' in
+      let nzdigit s = maps (fun x -> to_int x)
+                           (fun () -> (List.fold_left 
+                                        (fun acc x -> acc <> sym x)
+                                        (sym '1') 
+                                        (of_string "23456789")) s) 
+                           () 
+      in
+      let digit s   = 
+        (
+           (fun s -> maps (fun x -> to_int x) (fun () -> sym '0' s) ()) 
+        <> (fun s -> maps (fun x -> x) (fun () -> nzdigit s) ())
+        ) s
+      in 
+      let rec num s = 
+        (  
+           (digit 
+           |> (fun x s -> maps (fun n -> x :: n) (fun () -> num s) ())
+           )
+        <> (fun s -> maps (fun _ -> []) (fun () -> empty s) ())
+        ) s 
+      in
+      fun s -> 
+        maps 
+          (fun l -> List.fold_left (fun acc x -> acc * 10 + x) 0 l)
+          (fun () -> (
+                        (nzdigit 
+                        |> (fun x s -> maps (fun y -> x :: y) (fun () -> num s) ())
+                        ) 
+                     <> (fun s -> maps (fun x -> [to_int x]) (fun () -> sym '0' s) ())
+                     ) s)
+          ()
+
+    let test09 = expr (fun s -> maps (fun x -> `Primary x) (fun () -> integer s) ())
 
     let test10 = 
       let rec w s = 
@@ -630,6 +657,25 @@ module MonadicCPS =
 
     let runtest11 = runtest1_ test11
 
+    let runinteger = 
+      let rec print = Printf.sprintf "%i"
+      in run print (integer |> get_eof)
+
+    let runtest09 = run (print_expr' (Printf.sprintf "%i")) test09
+
+    let runtest09' = 
+      let rec eval_expr = function 
+      | `Primary x -> x
+      | `BinOp (op,x,y) -> 
+        let f = function 
+        | '+' -> fun x y -> x + y
+        | '*' -> fun x y -> x * y
+        | '-' -> fun x y -> x - y
+        | '/' -> fun x y -> x / y
+        in (f op) (eval_expr x) (eval_expr y)
+      | `Bracket x -> eval_expr x
+      in run (fun x -> Printf.sprintf "%i" (eval_expr x)) test09
+
     let _ = 
       Printf.printf "Running monadic CPS-style:\n%!";
 (*
@@ -677,12 +723,24 @@ module MonadicCPS =
       runtest10 "aaaaaaaaaa";
       (* runtest10 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" *)
 *)
+(*
       runtest11 "a";
       runtest11 "aa";
       runtest11 "aaa";
       runtest11 "aaaaa";
       runtest11 "aaaaaaaaaa";
       runtest11 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+*)
+      runinteger "123";
 
+      runtest09 "1+23*9";
+
+      runtest09' "1-2-3";
+      runtest09' "1+2-3";
+      runtest09' "1-(2-3)";
+      runtest09' "1-2*3";
+      runtest09' "1/2+3";
+      runtest09' "1*2/3";
+      
   end
 
